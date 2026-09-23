@@ -133,6 +133,63 @@ describe('model check: setTopology against the gap', () => {
     })
 })
 
+describe('model check: loop capacity', () => {
+    const ring = (n: number) => {
+        const nodes = Array.from({ length: n }, (_, i) => String.fromCharCode(97 + i))
+        return { nodes, links: nodes.map((x, i) => oneway(x, nodes[(i + 1) % n])) }
+    }
+
+    // One agent per node of the ring, each going one or two steps round:
+    // the known-gap schedules that fill it, now refused at entry.
+    test.each([2, 3, 4])('a one-way ring of %i filled by as many agents no longer deadlocks', n => {
+        const topology = ring(n)
+        const agents = topology.nodes.map((x, i) => ({
+            name: x.toUpperCase(),
+            path: [x, topology.nodes[(i + 1) % n], ...(n > 2 ? [topology.nodes[(i + 2) % n]] : [])],
+        }))
+        const result = check({ topology, agents, loops: true })
+        expectExhaustive(result)
+        expect(result.findings).toEqual([])
+    })
+
+    // Parking spurs off a one-way loop of four; each robot starts in its own
+    // spur and drives round to the next robot's.
+    const spurs = () => {
+        const loop = ['a', 'b', 'c', 'd']
+        const topology = {
+            nodes: [...loop, ...loop.map(n => 'P' + n)],
+            links: [...loop.map((n, i) => oneway(n, loop[(i + 1) % 4])), ...loop.map(n => bi('P' + n, n))],
+        }
+        const route = (start: number, steps: number) => {
+            const path = ['P' + loop[start]]
+            for (let k = 0; k <= steps; k++) path.push(loop[(start + k) % 4])
+            path.push('P' + loop[(start + steps) % 4])
+            return path
+        }
+        return { topology, route }
+    }
+
+    test('four robots on parking spurs, two steps each, are clean', () => {
+        const { topology, route } = spurs()
+        const agents = [0, 1, 2, 3].map(i => ({ name: 'R' + i, path: route(i, 2) }))
+        const result = check({ topology, agents, loops: true })
+        expectExhaustive(result)
+        expect(result.findings).toEqual([])
+    })
+
+    // Not yet solved: with three steps each, the loop keeps its free node,
+    // but a robot waiting in a spur to enter blocks the exit of one already
+    // on the loop.  That one cannot leave into the occupied spur, and the one
+    // in the spur cannot enter the full loop.
+    test('a spur occupied by a robot waiting to enter still blocks an exit', () => {
+        const { topology, route } = spurs()
+        const agents = [0, 1, 2, 3].map(i => ({ name: 'R' + i, path: route(i, 3) }))
+        const result = check({ topology, agents, loops: true })
+        expectExhaustive(result)
+        expect(result.findings.some(f => f.kind === 'deadlock')).toBe(true)
+    })
+})
+
 describe('model check: what a stationary agent holds', () => {
     // Characterises today's rule, and changes when the rule does.  An agent
     // locks the node after the one it arrives at, even while it stands still

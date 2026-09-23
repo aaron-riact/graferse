@@ -41,6 +41,8 @@ export interface Scenario {
     // hand the directed links to setTopology, so the walk reserves through
     // groups joined in both directions
     setTopology?: boolean
+    // declare every loop of one-way links with setLoops (capacity N - 1)
+    loops?: boolean
     // give up (and say so) past this many distinct states
     maxStates?: number
 }
@@ -128,6 +130,12 @@ function build(scenario: Scenario): World {
             if (bidirectional) directed.push([nodeLocks.get(to)!, nodeLocks.get(from)!])
         }
         creator.setTopology(directed)
+    }
+    if (scenario.loops) {
+        const oneway = scenario.topology.links
+            .filter(link => !link.bidirectional)
+            .map(({ from, to }): [Lock, Lock] => [nodeLocks.get(from)!, nodeLocks.get(to)!])
+        creator.setLoops(creator.findLoops(oneway))
     }
     const makeLocker = creator.makeMakeLocker(getLock, getLockForLink)
     const agents = scenario.agents.map((spec): Agent => ({

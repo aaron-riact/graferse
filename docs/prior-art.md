@@ -100,8 +100,11 @@ wait-for graph.
 
 The gap that leaves is circular wait among agents that are all travelling the
 same way, on a cycle with no spare capacity. A global banker's check would
-catch it. Lock groups and `setTopology` are the nearest tool here, and they
-only cover the cases you declare.
+catch it. Declared loops (`setLoops`, see [loops.md](loops.md)) now keep one
+node free on every one-way loop, which closes it for the loop itself. A loop
+whose exit is blocked by an agent waiting to enter it is not covered yet.
+Lock groups and `setTopology` cover pairs of groups joined in both
+directions. All of these only cover the cases you declare.
 
 ## Reading
 

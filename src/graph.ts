@@ -244,6 +244,8 @@ class Graferse<T>
     locks: Lock[] = []
     linkLocks: LinkLock[] = []
     lockGroups: Lock[][] = []
+    // declared one-way loops: a loop of N nodes admits at most N - 1 agents
+    loops: Lock[][] = []
     lastCallCache = new Map<string,() => void>()
     // agents with a live path locker.  notifyWaiters can only replay an
     // agent id, so one agent may own one path: a second makePathLocker
@@ -285,6 +287,11 @@ class Graferse<T>
             throw new Error(
                 `cannot remove lock ${lock.id}: member of a lock group; `
                 + `replace the group before removing the lock`)
+        }
+        if (this.loops.some(loop => loop.includes(lock))) {
+            throw new Error(
+                `cannot remove lock ${lock.id}: on a declared loop; `
+                + `declare the loops again without it first`)
         }
         const at = this.locks.indexOf(lock)
         if (at === -1) return false
@@ -419,6 +426,70 @@ class Graferse<T>
     // reserve through walk is only exact while groups stay disjoint.
     setLockGroup(lockGroup: Lock[]) {
         this.lockGroups.push(lockGroup)
+    }
+
+    // Every simple directed loop in the given edges, each as its nodes in
+    // travel order.  Pass the one-way links only: a bidirectional link is
+    // guarded by direction claims already, and from an edge list alone a
+    // pair of one-way links cannot be told apart from one bidirectional
+    // link.  Enumerates every loop, which is exponential in the worst case;
+    // it is meant for site maps, run once.
+    findLoops(edges: Array<[Lock, Lock]>): Lock[][] {
+        const next = new Map<Lock, Lock[]>()
+        for (const [from, to] of edges) {
+            if (from === to) continue
+            next.set(from, [...(next.get(from) ?? []), to])
+        }
+        const order = new Map([...new Set(edges.flat())].map((lock, i) => [lock, i]))
+        const loops: Lock[][] = []
+        // each loop is found once, from its lowest-ordered node
+        for (const [start, rank] of order) {
+            const walk = (at: Lock, path: Lock[]) => {
+                for (const to of next.get(at) ?? []) {
+                    if (to === start) loops.push([...path])
+                    else if (order.get(to)! > rank && !path.includes(to)) walk(to, [...path, to])
+                }
+            }
+            walk(start, [start])
+        }
+        return loops
+    }
+
+    // Declare the one-way loops (see findLoops).  One-way links are safe
+    // places to stop, so the reservation walk never looks past them; that
+    // is false on a loop, where every agent can end up waiting on the one in
+    // front.  A loop of N nodes deadlocks once N agents are on it, so an
+    // agent is admitted onto a loop only while fewer than N - 1 others are
+    // on it.  Replaces any loops declared before.
+    setLoops(loops: Lock[][]) {
+        for (const loop of loops) {
+            if (loop.length < 2 || new Set(loop).size !== loop.length) {
+                throw new Error('a loop needs two or more distinct locks')
+            }
+        }
+        this.loops = loops.map(loop => [...loop])
+    }
+
+    // Whether byWhom may take `lock` without filling a loop it is not on
+    // yet.  When refused, it waits on every node of the full loop: any of
+    // them coming free (an agent moving on, or leaving) replays it.
+    isLoopAvailable(lock: Lock, byWhom: string) {
+        for (const loop of this.loops) {
+            if (!loop.includes(lock)) continue
+            // a wait left from an earlier refusal; recomputed below
+            for (const member of loop) member.waiting.delete(byWhom)
+            if (loop.some(member => member.isLocked(byWhom))) continue
+            const others = new Set<string>()
+            for (const member of loop) {
+                for (const who of member.lockedBy) if (who !== byWhom) others.add(who)
+            }
+            if (others.size + 1 > loop.length - 1) {
+                trace.log(`loop of ${loop.length} holds ${others.size}, ${byWhom} waits`)
+                for (const member of loop) member.waiting.add(byWhom)
+                return false
+            }
+        }
+        return true
     }
 
     // Hand over the directed edges so the reservation walk can see the quotient
@@ -758,6 +829,11 @@ class Graferse<T>
                             }
 
                             const lock = getLock(path[i])
+                            // the node we stand on was admitted when we moved here
+                            if (i > currentIdx && !this.isLoopAvailable(lock, byWhom)) {
+                                stopped = `loop through ${this.identity(path[i])} is full`
+                                break;
+                            }
                             if (!this.isLockGroupAvailable(lock, byWhom)) {
                                 trace.log('could not obtain lock, group is locked')
                                 stopped = `lock group holding ${this.identity(path[i])} is taken`

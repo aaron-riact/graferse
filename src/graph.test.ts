@@ -1994,3 +1994,58 @@ describe('Exceptions', () => {
         expect(nodeC.isLocked()).toBeFalsy()
     })
 })
+
+describe('loop capacity', () => {
+    const setup = (ids: string[]) => {
+        const creator = new Graferse<string>(x => x)
+        const locks = new Map(ids.map(id => [id, creator.makeLock(id)]))
+        const at = (id: string) => locks.get(id)!
+        return { creator, at }
+    }
+
+    test('findLoops finds each loop once, in travel order', () => {
+        const { creator, at } = setup(['a', 'b', 'c', 'd', 'e'])
+        const loops = creator.findLoops([
+            [at('a'), at('b')], [at('b'), at('c')], [at('c'), at('a')],
+            [at('c'), at('d')], [at('d'), at('c')],
+            [at('d'), at('e')], // leads nowhere back
+        ])
+        expect(loops.map(loop => loop.map(lock => lock.id))).toEqual([
+            ['a', 'b', 'c'],
+            ['c', 'd'],
+        ])
+    })
+
+    test('setLoops refuses a loop too short to hold anyone', () => {
+        const { creator, at } = setup(['a', 'b'])
+        expect(() => creator.setLoops([[at('a')]])).toThrow(/two or more distinct/)
+        expect(() => creator.setLoops([[at('a'), at('a')]])).toThrow(/two or more distinct/)
+        expect(() => creator.setLoops([[at('a'), at('b')]])).not.toThrow()
+    })
+
+    test('a loop of N admits N - 1 agents, and a waiter is woken by any member freeing', () => {
+        const { creator, at } = setup(['a', 'b', 'c'])
+        creator.setLoops([[at('a'), at('b'), at('c')]])
+        at('a').requestLock('agent1', 'a')
+        expect(creator.isLoopAvailable(at('b'), 'agent2')).toBe(true)
+        at('b').requestLock('agent2', 'b')
+
+        // a third agent would fill the loop: refused, waiting on every member
+        expect(creator.isLoopAvailable(at('c'), 'agent3')).toBe(false)
+        expect(['a', 'b', 'c'].every(id => at(id).waiting.has('agent3'))).toBe(true)
+
+        // agents already on the loop move round it freely
+        expect(creator.isLoopAvailable(at('c'), 'agent1')).toBe(true)
+
+        // agent1 leaves: its node frees and hands back the waiter
+        expect(at('a').unlock('agent1')).toEqual(new Set(['agent3']))
+        expect(creator.isLoopAvailable(at('c'), 'agent3')).toBe(true)
+        expect(['a', 'b', 'c'].some(id => at(id).waiting.has('agent3'))).toBe(false)
+    })
+
+    test('a lock on a declared loop cannot be removed', () => {
+        const { creator, at } = setup(['a', 'b'])
+        creator.setLoops([[at('a'), at('b')]])
+        expect(() => creator.removeLock(at('a'))).toThrow(/declared loop/)
+    })
+})
