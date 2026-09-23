@@ -2046,6 +2046,16 @@ describe('loop capacity', () => {
         expect(Date.now() - started).toBeLessThan(1000)
     })
 
+    test('shortestLoop finds the smallest loop, or none', () => {
+        const { creator, at } = setup(['a', 'b', 'c', 'd', 'x', 'y', 'z'])
+        const ring = (...ids: string[]) =>
+            ids.map((id, i) => [at(id), at(ids[(i + 1) % ids.length])] as [Lock, Lock])
+        const loop = creator.shortestLoop([...ring('a', 'b', 'c', 'd'), ...ring('x', 'y', 'z')])
+        expect(loop?.map(lock => lock.id)).toEqual(['x', 'y', 'z'])
+        expect(creator.shortestLoop(ring('a', 'b').slice(0, 1))).toBeUndefined()
+        expect(creator.shortestLoop(ring('a', 'b'))?.map(lock => lock.id)).toEqual(['a', 'b'])
+    })
+
     test('setLoops refuses a loop too short to hold anyone', () => {
         const { creator, at } = setup(['a', 'b'])
         expect(() => creator.setLoops([[at('a')]])).toThrow(/two or more distinct/)

@@ -60,3 +60,5 @@ apart, and `src/modelCheck.test.ts` pins down both.
 
 With no more robots than the loop's N - 1, the gap cannot arise: once the
 loop is at its limit, every robot is on it and none is waiting in a spur.
+`shortestLoop(onewayEdges)` finds the smallest loop, which sets that limit
+for the whole map, without listing every loop.

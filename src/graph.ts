@@ -529,6 +529,35 @@ class Graferse<T>
         return loops
     }
 
+    // The loop with the fewest nodes in the given edges, or undefined when
+    // there is none.  What a fleet size limit needs: a one-way loop of N
+    // nodes holds at most N - 1 agents, so the smallest loop sets the limit.
+    // Breadth-first from every node, O(V (V + E)), without listing loops.
+    shortestLoop(edges: Array<[Lock, Lock]>): Lock[] | undefined {
+        const next = directedAdjacency(edges)
+        let best: Lock[] | undefined
+        for (const start of new Set(edges.flat())) {
+            const parent = new Map<Lock, Lock | undefined>([[start, undefined]])
+            const queue = [start]
+            search: while (queue.length > 0) {
+                const at = queue.shift()!
+                for (const to of next.get(at) ?? []) {
+                    if (to === start) {
+                        const loop: Lock[] = []
+                        for (let node: Lock | undefined = at; node; node = parent.get(node)) loop.unshift(node)
+                        if (!best || loop.length < best.length) best = loop
+                        break search
+                    }
+                    if (!parent.has(to)) {
+                        parent.set(to, at)
+                        queue.push(to)
+                    }
+                }
+            }
+        }
+        return best
+    }
+
     // Declare the one-way loops (see findLoops).  One-way links are safe
     // places to stop, so the reservation walk never looks past them; that
     // is false on a loop, where every agent can end up waiting on the one in
