@@ -39,26 +39,37 @@ of them coming free replays it.
 
 Graferse still never holds your graph. Without `setLoops` nothing changes.
 
-## Not yet covered
+## Blocked exits, and the fleet limit that prevents them
 
-The loop keeps a free node, but its exits can still be blocked. Hang a
-dead-end spur off each node of a four-loop, and send four robots round from
-spur to spur, three steps each. Three get onto the loop. The fourth waits in
-its spur, which is exactly where one on the loop wants to leave it, and the
-run into a dead end is refused while it is occupied. The one on the loop
-cannot leave, the one in the spur cannot enter, and the loop is stuck.
+Run no more agents than the smallest one-way loop's N - 1, and no loop can
+deadlock, `setLoops` or not: once a loop is at its limit, every agent is
+on it and none is waiting to get on. `shortestLoop(onewayEdges)` finds that
+loop, and so the limit for the whole map, without listing every loop.
+In every case the model checker walks, N - 1 agents never deadlock; that is
+evidence for these cases, not a proof for every route.
+
+`setLoops` is for running more agents than that, and it has a limit of its
+own. It keeps a free node on every declared loop, but it cannot keep the
+loop's exits clear. Hang a dead-end spur off each node of a four-loop, and
+send four robots round from spur to spur, three steps each. Three get onto
+the loop. The fourth waits in its spur, which is exactly where one on the
+loop wants to leave it, and the run into a dead end is refused while it is
+occupied. The one on the loop cannot leave, the one in the spur cannot
+enter, and the loop is stuck.
 
 These jobs can be finished: `feasible()` in `src/modelCheck.ts` knows
 nothing of locks, only that a node holds one robot, and finds a way through
 whether the robots start standing in their spurs or arrive one at a time.
-So this is a gap in the rules, not an impossible job set.
+So beyond the fleet limit, this is a gap in the rules, not an impossible
+job set.
+
+Reserving each agent's exit before it joins a loop closes that case and
+opens another: two agents that swap spurs then wait for each other before
+either gets on, where without the rule one would use the loop to wait in.
+Tried, model-checked, and not adopted. Beating both needs look-ahead, the
+banker's check `prior-art.md` mentions.
 
 Some job sets are impossible, and no rule can help them. Four robots
 standing in four full spurs cannot each move one spur along, and a one-way
-ring filled from the start cannot move at all. `feasible()` tells the two
-apart, and `src/modelCheck.test.ts` pins down both.
-
-With no more robots than the loop's N - 1, the gap cannot arise: once the
-loop is at its limit, every robot is on it and none is waiting in a spur.
-`shortestLoop(onewayEdges)` finds the smallest loop, which sets that limit
-for the whole map, without listing every loop.
+ring filled from the start cannot move at all. `feasible()` tells those
+apart from gaps in the rules, and `src/modelCheck.test.ts` pins down both.

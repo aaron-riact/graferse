@@ -100,9 +100,10 @@ wait-for graph.
 
 The gap that leaves is circular wait among agents that are all travelling the
 same way, on a cycle with no spare capacity. A global banker's check would
-catch it. Declared loops (`setLoops`, see [loops.md](loops.md)) now keep one
-node free on every one-way loop, which closes it for the loop itself. A loop
-whose exit is blocked by an agent waiting to enter it is not covered yet.
+catch it. Running no more agents than the smallest one-way loop's N - 1
+rules it out (see [loops.md](loops.md)). Past that limit, declared loops
+(`setLoops`) keep one node free on every one-way loop, but not their exits:
+an agent waiting to join can block one that wants to leave.
 Lock groups and `setTopology` cover pairs of groups joined in both
 directions. All of these only cover the cases you declare.
 
