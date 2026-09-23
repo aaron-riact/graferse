@@ -633,8 +633,8 @@ describe('ngraph', () => {
         const nodeB = makeNode('b')
         const nodeC = makeNode('c')
 
-        graph.addLink('a', 'b', creator.makeLock('ab'))
-        graph.addLink('b', 'c', creator.makeLock('bc'))
+        graph.addLink('a', 'b', creator.makeLinkLock('a', 'b'))
+        graph.addLink('b', 'c', creator.makeLinkLock('b', 'c'))
 
         const pathFinder = ngraphPath.aStar(graph, { oriented: true })
         const path = pathFinder.find('a', 'c').reverse()
@@ -684,8 +684,8 @@ describe('ngraph', () => {
         const nodeB = makeNode('b')
         const nodeC = makeNode('c')
 
-        graph.addLink('a', 'b', creator.makeLock('ab'))
-        graph.addLink('b', 'c', creator.makeLock('bc'))
+        graph.addLink('a', 'b', creator.makeLinkLock('a', 'b'))
+        graph.addLink('b', 'c', creator.makeLinkLock('b', 'c'))
 
         const pathFinder = ngraphPath.aStar(graph, { oriented: true })
         const path = pathFinder.find('a', 'c').reverse()
@@ -730,8 +730,8 @@ describe('ngraph', () => {
         const nodeB = makeNode('b')
         const nodeC = makeNode('c')
 
-        graph.addLink('a', 'b', creator.makeLock('ab'))
-        graph.addLink('b', 'c', creator.makeLock('bc'))
+        graph.addLink('a', 'b', creator.makeLinkLock('a', 'b'))
+        graph.addLink('b', 'c', creator.makeLinkLock('b', 'c'))
 
         const pathFinder = ngraphPath.aStar(graph, { oriented: true })
         const path = pathFinder.find('a', 'c').reverse()
@@ -743,9 +743,9 @@ describe('ngraph', () => {
             locker.arrivedAt(path.findIndex(node => node.id === nodeId))
 
         // manually lock all nodes
-        nodeA.data.requestLock("agent1")
-        nodeB.data.requestLock("agent1")
-        nodeC.data.requestLock("agent1")
+        nodeA.data.requestLock("agent1", "a")
+        nodeB.data.requestLock("agent1", "b")
+        nodeC.data.requestLock("agent1", "c")
 
         expect(nodeA.data.isLocked()).toBeTruthy()
         expect(nodeB.data.isLocked()).toBeTruthy()
@@ -1570,10 +1570,10 @@ describe('ngraph', () => {
         const nodeA = makeNode('a')
         const nodeB = makeNode('b')
         const nodeC = makeNode('c')
-        graph.addLink('a', 'b', creator.makeLock('ab'))
-        graph.addLink('b', 'c', creator.makeLock('bc'))
-        graph.addLink('c', 'b', creator.makeLock('cb'))
-        graph.addLink('b', 'a', creator.makeLock('ba'))
+        graph.addLink('a', 'b', creator.makeLinkLock('a', 'b'))
+        graph.addLink('b', 'c', creator.makeLinkLock('b', 'c'))
+        graph.addLink('c', 'b', creator.makeLinkLock('c', 'b'))
+        graph.addLink('b', 'a', creator.makeLinkLock('b', 'a'))
 
         const pathFinder = ngraphPath.aStar(graph, { oriented: true })
         const path = pathFinder.find('a', 'c').reverse()
@@ -1770,7 +1770,7 @@ describe('Components', () => {
                 // agent2 queues up behind the idle agent1
                 let agent2Granted: string[] = []
                 makeLocker('agent2').makePathLocker(['a', 'b'])(
-                    (next: NextNode[]) => { agent2Granted = next.map(n => n.node) },
+                    (next: NextNode[]) => { agent2Granted = next.map(n => String(n.node)) },
                 ).arrivedAt(0)
                 expect(agent2Granted).toEqual(['a'])
                 return { locks, agent1, agent2Granted: () => agent2Granted }
