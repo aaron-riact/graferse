@@ -33,6 +33,7 @@ jobs:
         check-latest: true
     - run: npm ci
     - run: npm run build --if-present
+    - run: npm run typecheck
     - run: npm run test:cover -- --silent --verbose
     - name: Coveralls
       uses: coverallsapp/github-action@v2

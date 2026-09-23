@@ -38,6 +38,7 @@ jobs:
       - run: npm ci
       - run: npm test -- --silent --verbose
       - run: npm run lint
+      - run: npm run typecheck
 
   publish-npm:
     needs: test

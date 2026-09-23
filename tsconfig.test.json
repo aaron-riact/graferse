@@ -1,0 +1,12 @@
+{
+  // Type-checks everything under src, tests included. The build config
+  // compiles from src/index.ts only, and ts-jest with isolatedModules does
+  // not type-check, so test files had no type check at all.
+  "extends": "./tsconfig.json",
+  "files": [],
+  "include": ["src/**/*.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["jest", "node"]
+  }
+}
