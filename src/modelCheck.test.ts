@@ -1,4 +1,4 @@
-import { check } from './modelCheck.js'
+import { check, feasible } from './modelCheck.js'
 import type { Scenario } from './modelCheck.js'
 
 const bi = (from: string, to: string) => ({ from, to, bidirectional: true })
@@ -177,16 +177,56 @@ describe('model check: loop capacity', () => {
         expect(result.findings).toEqual([])
     })
 
-    // Not yet solved: with three steps each, the loop keeps its free node,
-    // but a robot waiting in a spur to enter blocks the exit of one already
-    // on the loop.  That one cannot leave into the occupied spur, and the one
-    // in the spur cannot enter the full loop.
+    // The real gap.  Three steps each is a job set any controller could
+    // finish, whether the robots start standing in their spurs or arrive
+    // one at a time.  The loop still keeps its free node, but a robot
+    // waiting in a spur to enter blocks the exit of one already on the loop:
+    // that one cannot leave into the occupied spur, and the one in the spur
+    // cannot enter the full loop.
     test('a spur occupied by a robot waiting to enter still blocks an exit', () => {
         const { topology, route } = spurs()
-        const agents = [0, 1, 2, 3].map(i => ({ name: 'R' + i, path: route(i, 3) }))
-        const result = check({ topology, agents, loops: true })
+        const scenario = { topology, agents: [0, 1, 2, 3].map(i => ({ name: 'R' + i, path: route(i, 3) })), loops: true }
+        expect(feasible(scenario, 'placed')).toBe(true)
+        expect(feasible(scenario, 'arriving')).toBe(true)
+        const result = check(scenario)
         expectExhaustive(result)
         expect(result.findings.some(f => f.kind === 'deadlock')).toBe(true)
+    })
+})
+
+describe('model check: feasibility', () => {
+    // feasible() knows nothing of locks, only that a node holds one robot.
+    // Any rule only forbids some of its moves, so false means no controller
+    // can finish the jobs.  It keeps impossible job sets from being mistaken
+    // for locking bugs.
+    const loop = ['a', 'b', 'c', 'd']
+    const topology = {
+        nodes: [...loop, ...loop.map(n => 'P' + n)],
+        links: [...loop.map((n, i) => oneway(n, loop[(i + 1) % 4])), ...loop.map(n => bi('P' + n, n))],
+    }
+    const rotate = (steps: number) => [0, 1, 2, 3].map(i => {
+        const path = ['P' + loop[i]]
+        for (let k = 0; k <= steps; k++) path.push(loop[(i + k) % 4])
+        return { name: 'R' + i, path: [...path, 'P' + loop[(i + steps) % 4]] }
+    })
+
+    test('four robots standing in full spurs cannot each move one along', () => {
+        // every target is taken by a robot whose own target is taken; the
+        // one spot that frees is reached through the node its taker blocks
+        expect(feasible({ topology, agents: rotate(1) }, 'placed')).toBe(false)
+        // arriving one at a time, the same jobs are easy: go one by one
+        expect(feasible({ topology, agents: rotate(1) }, 'arriving')).toBe(true)
+    })
+
+    test('a one-way ring filled from the start cannot move at all', () => {
+        const ring = { nodes: ['a', 'b', 'c'], links: [oneway('a', 'b'), oneway('b', 'c'), oneway('c', 'a')] }
+        const agents = [
+            { name: 'A', path: ['a', 'b', 'c'] },
+            { name: 'B', path: ['b', 'c', 'a'] },
+            { name: 'C', path: ['c', 'a', 'b'] },
+        ]
+        expect(feasible({ topology: ring, agents }, 'placed')).toBe(false)
+        expect(feasible({ topology: ring, agents }, 'arriving')).toBe(true)
     })
 })
 

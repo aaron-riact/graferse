@@ -294,3 +294,43 @@ export function check(
     }
     return { states: visited.size, truncated, findings }
 }
+
+/**
+ * Whether the agents' jobs can be finished at all, by any controller.
+ * Knows nothing of locks: one agent per real node, an agent moves along its
+ * own path only onto an empty node, and leaves from its last node.  Any
+ * locking rule only ever forbids some of these moves, so an unreachable
+ * goal here means no rule can finish the scenario.
+ *
+ *   placed    every agent starts standing on the first node of its path
+ *   arriving  every agent starts off the graph and enters onto its first
+ *             node once that is empty, as check() models it
+ */
+export function feasible(scenario: Scenario, start: 'placed' | 'arriving'): boolean {
+    const paths = scenario.agents.map(a => a.path)
+    // index per agent: -1 off the graph, path.length once gone
+    const initial: number[] = paths.map(() => (start === 'placed' ? 0 : -1))
+    if (start === 'placed' && new Set(paths.map(p => p[0])).size !== paths.length) {
+        throw new Error('placed agents need distinct first nodes')
+    }
+    const seen = new Set<string>([initial.join()])
+    const queue = [initial]
+    while (queue.length > 0) {
+        const at = queue.shift()!
+        if (at.every((index, i) => index === paths[i].length)) return true
+        const occupied = new Set(
+            at.flatMap((index, i) => (index >= 0 && index < paths[i].length ? [paths[i][index]] : [])))
+        at.forEach((index, i) => {
+            if (index === paths[i].length) return
+            const leaving = index === paths[i].length - 1
+            if (!leaving && occupied.has(paths[i][index + 1])) return
+            const next = [...at]
+            next[i] = index + 1
+            const key = next.join()
+            if (seen.has(key)) return
+            seen.add(key)
+            queue.push(next)
+        })
+    }
+    return false
+}

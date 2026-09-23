@@ -47,5 +47,15 @@ its spur, which is exactly where one on the loop wants to leave it, and the
 run into a dead end is refused while it is occupied. The one on the loop
 cannot leave, the one in the spur cannot enter, and the loop is stuck.
 
-`src/modelCheck.test.ts` pins this down, next to the cases the loop check
-solves.
+These jobs can be finished: `feasible()` in `src/modelCheck.ts` knows
+nothing of locks, only that a node holds one robot, and finds a way through
+whether the robots start standing in their spurs or arrive one at a time.
+So this is a gap in the rules, not an impossible job set.
+
+Some job sets are impossible, and no rule can help them. Four robots
+standing in four full spurs cannot each move one spur along, and a one-way
+ring filled from the start cannot move at all. `feasible()` tells the two
+apart, and `src/modelCheck.test.ts` pins down both.
+
+With no more robots than the loop's N - 1, the gap cannot arise: once the
+loop is at its limit, every robot is on it and none is waiting in a spur.
