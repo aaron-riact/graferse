@@ -28,8 +28,9 @@ creator.setLoops(loops)
 
 Pass the one-way links only. A bidirectional link is guarded by direction
 claims already, and from an edge list alone a pair of one-way links looks
-the same as one bidirectional link. `findLoops` lists every simple loop,
-which is exponential in the worst case; it is meant for site maps, run once.
+the same as one bidirectional link. `findLoops` lists every simple loop with
+Johnson's algorithm: loops only exist inside strongly connected parts, so a
+map with many paths but few loops stays fast.
 
 An agent on a loop moves round it freely. An agent about to take its first
 node on a loop is admitted only while fewer than N - 1 others hold nodes on

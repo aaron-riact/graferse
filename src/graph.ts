@@ -239,6 +239,43 @@ type LockGroupConflict = {
 }
 // TODO add a keep alive where owners need to report in periodically, else their locks will be freed
 // where T is the type you will supply the path in
+// Outgoing neighbours per lock, duplicates and self-loops dropped
+function directedAdjacency(edges: Array<[Lock, Lock]>): Map<Lock, Lock[]> {
+    const next = new Map<Lock, Lock[]>()
+    for (const [from, to] of edges) {
+        if (from === to) continue
+        const out = next.get(from) ?? []
+        if (!out.includes(to)) out.push(to)
+        next.set(from, out)
+    }
+    return next
+}
+
+// The nodes that can both reach and be reached from `start`, walking only
+// through `allowed`: its strongly connected component there
+function strongComponentOf(start: Lock, next: Map<Lock, Lock[]>, allowed: Set<Lock>): Set<Lock> {
+    const reach = (from: Lock, step: (lock: Lock) => Lock[]) => {
+        const seen = new Set<Lock>([from])
+        const queue = [from]
+        while (queue.length > 0) {
+            for (const to of step(queue.shift()!)) {
+                if (allowed.has(to) && !seen.has(to)) {
+                    seen.add(to)
+                    queue.push(to)
+                }
+            }
+        }
+        return seen
+    }
+    const previous = new Map<Lock, Lock[]>()
+    for (const [from, outs] of next) {
+        for (const to of outs) previous.set(to, [...(previous.get(to) ?? []), from])
+    }
+    const forward = reach(start, lock => next.get(lock) ?? [])
+    const backward = reach(start, lock => previous.get(lock) ?? [])
+    return new Set([...forward].filter(lock => backward.has(lock)))
+}
+
 class Graferse<T>
 {
     locks: Lock[] = []
@@ -429,28 +466,65 @@ class Graferse<T>
     }
 
     // Every simple directed loop in the given edges, each as its nodes in
-    // travel order.  Pass the one-way links only: a bidirectional link is
-    // guarded by direction claims already, and from an edge list alone a
-    // pair of one-way links cannot be told apart from one bidirectional
-    // link.  Enumerates every loop, which is exponential in the worst case;
-    // it is meant for site maps, run once.
+    // travel order, starting from its lowest-ordered node (order of first
+    // appearance in edges).  Pass the one-way links only: a bidirectional
+    // link is guarded by direction claims already, and from an edge list
+    // alone a pair of one-way links cannot be told apart from one
+    // bidirectional link.
+    //
+    // Johnson's algorithm (D. B. Johnson, "Finding all the elementary
+    // circuits of a directed graph", SIAM J. Comput. 4(1), 1975).  Loops
+    // only exist inside strongly connected components, so each start
+    // searches its own component and nothing else, with blocking to skip
+    // paths already known not to close.  Time O((V + E)(C + 1)) for C loops:
+    // a map with many paths but few loops stays fast.
     findLoops(edges: Array<[Lock, Lock]>): Lock[][] {
-        const next = new Map<Lock, Lock[]>()
-        for (const [from, to] of edges) {
-            if (from === to) continue
-            next.set(from, [...(next.get(from) ?? []), to])
-        }
-        const order = new Map([...new Set(edges.flat())].map((lock, i) => [lock, i]))
+        const next = directedAdjacency(edges)
+        const order = [...new Set(edges.flat())]
         const loops: Lock[][] = []
-        // each loop is found once, from its lowest-ordered node
-        for (const [start, rank] of order) {
-            const walk = (at: Lock, path: Lock[]) => {
-                for (const to of next.get(at) ?? []) {
-                    if (to === start) loops.push([...path])
-                    else if (order.get(to)! > rank && !path.includes(to)) walk(to, [...path, to])
-                }
+        for (let k = 0; k < order.length; k++) {
+            const start = order[k]
+            // the start's component, among nodes not yet used as a start
+            const allowed = new Set(order.slice(k))
+            const component = strongComponentOf(start, next, allowed)
+            if (component.size < 2) continue
+
+            const blocked = new Set<Lock>()
+            const blockedBy = new Map<Lock, Set<Lock>>()
+            const stack: Lock[] = []
+            const unblock = (lock: Lock) => {
+                blocked.delete(lock)
+                const waiting = blockedBy.get(lock)
+                if (!waiting) return
+                blockedBy.delete(lock)
+                for (const other of waiting) if (blocked.has(other)) unblock(other)
             }
-            walk(start, [start])
+            const circuit = (at: Lock): boolean => {
+                let closed = false
+                stack.push(at)
+                blocked.add(at)
+                for (const to of next.get(at) ?? []) {
+                    if (!component.has(to)) continue
+                    if (to === start) {
+                        loops.push([...stack])
+                        closed = true
+                    } else if (!blocked.has(to) && circuit(to)) {
+                        closed = true
+                    }
+                }
+                if (closed) {
+                    unblock(at)
+                } else {
+                    for (const to of next.get(at) ?? []) {
+                        if (!component.has(to)) continue
+                        if (!blockedBy.has(to)) blockedBy.set(to, new Set())
+                        blockedBy.get(to)!.add(at)
+                    }
+                }
+                stack.pop()
+                return closed
+            }
+            circuit(start)
         }
         return loops
     }

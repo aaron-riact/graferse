@@ -2016,6 +2016,36 @@ describe('loop capacity', () => {
         ])
     })
 
+    test('findLoops finds every loop exactly once in a complete graph', () => {
+        // a complete directed graph on four nodes has sum over k of
+        // C(4, k) * (k - 1)! loops: 6 + 8 + 6 = 20
+        const ids = ['a', 'b', 'c', 'd']
+        const { creator, at } = setup(ids)
+        const edges = ids.flatMap(from => ids.filter(to => to !== from).map(to => [at(from), at(to)] as [Lock, Lock]))
+        const loops = creator.findLoops(edges).map(loop => loop.map(lock => lock.id).join(''))
+        expect(loops).toHaveLength(20)
+        expect(new Set(loops).size).toBe(20)
+    })
+
+    test('findLoops does not walk dead ends: only strongly connected parts can loop', () => {
+        // a ladder with 2^24 paths that never come back, beside one 2-loop.
+        // Walking every path from each start takes minutes; Johnson's
+        // algorithm searches only inside the loop's strong component.
+        const depth = 24
+        const ids = ['s', 'x', ...Array.from({ length: depth }, (_, i) => [`u${i}`, `l${i}`]).flat()]
+        const { creator, at } = setup(ids)
+        const edges: Array<[Lock, Lock]> = [[at('s'), at('x')], [at('x'), at('s')]]
+        edges.push([at('s'), at('u0')], [at('s'), at('l0')])
+        for (let i = 0; i + 1 < depth; i++) {
+            for (const from of [`u${i}`, `l${i}`]) {
+                edges.push([at(from), at(`u${i + 1}`)], [at(from), at(`l${i + 1}`)])
+            }
+        }
+        const started = Date.now()
+        expect(creator.findLoops(edges).map(loop => loop.map(lock => lock.id))).toEqual([['s', 'x']])
+        expect(Date.now() - started).toBeLessThan(1000)
+    })
+
     test('setLoops refuses a loop too short to hold anyone', () => {
         const { creator, at } = setup(['a', 'b'])
         expect(() => creator.setLoops([[at('a')]])).toThrow(/two or more distinct/)
