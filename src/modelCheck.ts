@@ -36,6 +36,11 @@ export interface AgentSpec {
 export interface Scenario {
     topology: Topology
     agents: AgentSpec[]
+    // lock groups, as node ids: each group is one space only one agent holds
+    lockGroups?: string[][]
+    // hand the directed links to setTopology, so the walk reserves through
+    // groups joined in both directions
+    setTopology?: boolean
     // give up (and say so) past this many distinct states
     maxStates?: number
 }
@@ -112,6 +117,17 @@ function build(scenario: Scenario): World {
         let lock = pseudoLinks.get(linkKey(from, to))
         if (!lock) pseudoLinks.set(linkKey(from, to), lock = creator.makeLinkLock(from, to, false))
         return lock
+    }
+    for (const group of scenario.lockGroups ?? []) {
+        creator.setLockGroup(group.map(id => nodeLocks.get(id)!))
+    }
+    if (scenario.setTopology) {
+        const directed: Array<[Lock, Lock]> = []
+        for (const { from, to, bidirectional } of scenario.topology.links) {
+            directed.push([nodeLocks.get(from)!, nodeLocks.get(to)!])
+            if (bidirectional) directed.push([nodeLocks.get(to)!, nodeLocks.get(from)!])
+        }
+        creator.setTopology(directed)
     }
     const makeLocker = creator.makeMakeLocker(getLock, getLockForLink)
     const agents = scenario.agents.map((spec): Agent => ({

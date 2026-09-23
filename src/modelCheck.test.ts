@@ -96,6 +96,43 @@ describe('model check: the known gap', () => {
     })
 })
 
+describe('model check: setTopology against the gap', () => {
+    // setTopology reserves through a pair of lock groups joined in both
+    // directions, so it treats a 2-cycle like a corridor.  It only knows
+    // pairs, and only declared groups: a longer one-way loop is not a pair.
+    test('closes a one-way 2-cycle once its nodes are declared groups', () => {
+        const result = check({
+            topology: { nodes: ['x', 'y'], links: [oneway('x', 'y'), oneway('y', 'x')] },
+            agents: [
+                { name: 'A', path: ['x', 'y'] },
+                { name: 'B', path: ['y', 'x'] },
+            ],
+            lockGroups: [['x'], ['y']],
+            setTopology: true,
+        })
+        expectExhaustive(result)
+        expect(result.findings).toEqual([])
+    })
+
+    test('leaves a one-way ring of three deadlocking', () => {
+        const result = check({
+            topology: {
+                nodes: ['a', 'b', 'c'],
+                links: [oneway('a', 'b'), oneway('b', 'c'), oneway('c', 'a')],
+            },
+            agents: [
+                { name: 'A', path: ['a', 'b', 'c'] },
+                { name: 'B', path: ['b', 'c', 'a'] },
+                { name: 'C', path: ['c', 'a', 'b'] },
+            ],
+            lockGroups: [['a'], ['b'], ['c']],
+            setTopology: true,
+        })
+        expectExhaustive(result)
+        expect(result.findings.some(f => f.kind === 'deadlock')).toBe(true)
+    })
+})
+
 describe('model check: what a stationary agent holds', () => {
     // Characterises today's rule, and changes when the rule does.  An agent
     // locks the node after the one it arrives at, even while it stands still
