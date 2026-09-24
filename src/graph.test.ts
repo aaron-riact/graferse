@@ -1928,6 +1928,16 @@ describe('notifyWaiters cascade', () => {
         expect(order).toEqual(['A', 'C', 'D', 'B'])
     })
 
+    test('continues notifying after a replay callback throws', () => {
+        const order: string[] = []
+        const creator = new Graferse<string>(x => x)
+        creator.lastCallCache.set('A', () => { throw new Error('boom') })
+        creator.lastCallCache.set('B', () => { order.push('B') })
+
+        expect(() => creator.notifyWaiters(new Set(['A', 'B']))).toThrow('boom')
+        expect(order).toEqual(['B'])
+    })
+
     test('a long freed chain does not recurse into the stack', () => {
         const creator = new Graferse<string>(x => x)
         const length = 5000
@@ -1947,6 +1957,66 @@ describe('notifyWaiters cascade', () => {
 })
 
 describe('Exceptions', () => {
+    test('a path callback failure does not skip released waiters', () => {
+        const creator = new Graferse<string>(node => node)
+        const nodeLocks = new Map(
+            ['a', 'b', 'c', 'x', 'y'].map(id => [id, creator.makeLock(id)]),
+        )
+        for (const [from, to] of [['a', 'b'], ['b', 'c'], ['x', 'b'], ['b', 'y']]) {
+            creator.makeLinkLock(from, to)
+        }
+        const makeLocker = creator.makeMakeLocker(
+            node => nodeLocks.get(node)!,
+            (from, to) => requireLinkLock(creator, node => nodeLocks.get(node)!, from, to),
+        )
+        let explode = false
+        const leader = makeLocker('leader').makePathLocker(['a', 'b', 'c'])(() => {
+            if (explode) throw new Error('boom')
+        })
+        let followerGrants: NextNode[][] = []
+        const follower = makeLocker('follower').makePathLocker(['x', 'b', 'y'])(
+            nodes => { followerGrants.push(nodes) },
+        )
+
+        leader.arrivedAt(0)
+        follower.arrivedAt(0)
+        followerGrants = []
+        explode = true
+
+        expect(() => leader.arrivedAt(2)).toThrow('boom')
+        expect(followerGrants).toEqual([[
+            {node: 'x', index: 0},
+            {node: 'b', index: 1},
+        ]])
+    })
+
+    test('a path callback failure is not hidden by a waiter failure', () => {
+        const creator = new Graferse<string>(node => node)
+        const nodeLocks = new Map(
+            ['a', 'b', 'c', 'x', 'y'].map(id => [id, creator.makeLock(id)]),
+        )
+        for (const [from, to] of [['a', 'b'], ['b', 'c'], ['x', 'b'], ['b', 'y']]) {
+            creator.makeLinkLock(from, to)
+        }
+        const makeLocker = creator.makeMakeLocker(
+            node => nodeLocks.get(node)!,
+            (from, to) => requireLinkLock(creator, node => nodeLocks.get(node)!, from, to),
+        )
+        let explode = false
+        const leader = makeLocker('leader').makePathLocker(['a', 'b', 'c'])(() => {
+            if (explode) throw new Error('leader boom')
+        })
+        const follower = makeLocker('follower').makePathLocker(['x', 'b', 'y'])(() => {
+            if (explode) throw new Error('follower boom')
+        })
+
+        leader.arrivedAt(0)
+        follower.arrivedAt(0)
+        explode = true
+
+        expect(() => leader.arrivedAt(2)).toThrow('leader boom')
+    })
+
     test('arrivedAt bounds', () => {
         const getLockForLink = (from: Lock, to: Lock) =>
             requireLinkLock(creator, (x: Lock) => x, from, to)

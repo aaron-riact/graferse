@@ -386,8 +386,9 @@ class Graferse<T>
     // Throws when a waiter has no cached call, which happens if you took a
     // lock with requestLock directly instead of through arrivedAt.  There is
     // no way to tell such an agent to retry, so the alternative is a silent
-    // stall.  On throw the rest of the queue is dropped: half a cascade is
-    // not resumed on the next release.
+    // stall.  A throwing waiter, missing or not, does not stop the cascade:
+    // every other queued waiter is still replayed and listeners still fire,
+    // then the first error is rethrown.
     notifyWaiters(whoCanMoveNow: Set<string>) {
         if (this._notifying) {
             // nested: run these before whatever is already queued, so a
@@ -398,21 +399,30 @@ class Graferse<T>
 
         this._notifyQueue = [...whoCanMoveNow]
         this._notifying = true
+        let firstError: unknown
+        let failed = false
         try {
             while (this._notifyQueue.length > 0) {
                 const waiter = this._notifyQueue.shift() as string
-                const lastCall = this.lastCallCache.get(waiter)
-                if (!lastCall) {
-                    throw new Error(`lastCallCached did not have expect entry for ${waiter}`)
+                try {
+                    const lastCall = this.lastCallCache.get(waiter)
+                    if (!lastCall) {
+                        throw new Error(`lastCallCached did not have expect entry for ${waiter}`)
+                    }
+                    lastCall()
+                } catch (error) {
+                    if (!failed) {
+                        firstError = error
+                        failed = true
+                    }
                 }
-                lastCall()
             }
         } finally {
             this._notifying = false
-            // drop anything a throwing callback left behind
             this._notifyQueue = []
         }
         this.notifyListeners()
+        if (failed) throw firstError
     }
 
     clearAllLocks(byWhom: string) {
@@ -980,11 +990,17 @@ class Graferse<T>
                             + ` → ${nextNodes.map(n => n.node).join(', ') || 'nothing'}`
                             + (stopped ? ` — ${stopped}` : ''))
                         // TODO consider not calling back with same values as last time or leave it up to clients to handle this
-                        callback(
-                            nextNodes,
-                            path.length - (currentIdx +1)
-                        )
-
+                        try {
+                            callback(
+                                nextNodes,
+                                path.length - (currentIdx +1)
+                            )
+                        } catch (error) {
+                            // still release the waiters, but report the
+                            // callback's failure rather than a later one
+                            try { this.notifyWaiters(whoCanMoveNow) } catch { /* ignored */ }
+                            throw error
+                        }
                         this.notifyWaiters(whoCanMoveNow)
                     } finally { trace.close() }
                 }
