@@ -86,7 +86,7 @@ class Lock {
     }
 
     isLocked(byWhom?: string) {
-        return byWhom
+        return byWhom !== undefined
             ? this.lockedBy.has(byWhom)
             : this.lockedBy.size > 0
     }
@@ -204,7 +204,7 @@ class LinkLock {
     isLocked(byWhom?: string) {
         return Array.from(this._otherdir.keys()).some(dir => {
             const lockers = this._lockers.get(dir) as Set<string>
-            return byWhom
+            return byWhom !== undefined
                 ? lockers.has(byWhom)
                 : lockers.size > 0
         })

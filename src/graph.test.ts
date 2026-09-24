@@ -1660,6 +1660,13 @@ describe('Components', () => {
             expect(lock.requestLock('test', 'def')).toBeTruthy()
         })
 
+        test('an empty agent id is not the same as no owner', () => {
+            const creator = new Graferse<string>(node => node)
+            const lock = creator.makeLock('a')
+            expect(lock.requestLock('holder', 'holder arrived')).toBeTruthy()
+            expect(lock.requestLock('', 'empty id arrived')).toBeFalsy()
+        })
+
         // isLockedByOtherThan is true whenever several holders share a lock,
         // even when byWhom is one of them.  The group availability check used
         // to treat the subsequent requestLock succeeding as a contradiction
@@ -1835,6 +1842,12 @@ describe('Components', () => {
                 const linkLock = creator.makeLinkLock('up', 'down', true) // is bidirectional
                 expect(linkLock.requestLock('agent1', 'up')).toBeTruthy()
                 expect(linkLock.requestLock('agent1', 'down')).toBeTruthy()
+            })
+            test('an empty agent id is not the same as no owner', () => {
+                const creator = new Graferse<string>(node => node)
+                const linkLock = creator.makeLinkLock('up', 'down', true)
+                expect(linkLock.requestLock('holder', 'up')).toBeTruthy()
+                expect(linkLock.isLocked('')).toBeFalsy()
             })
             test('owner cannot lock both directions if multiple owners', () => {
                 const creator = new Graferse<Node>(node => node.id)
