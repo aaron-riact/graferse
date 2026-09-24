@@ -1923,6 +1923,38 @@ describe('Listeners', () => {
         creator.notifyWaiters(new Set(["agent1"]))
         expect(listenCallbackCounter).toEqual(3)
     })
+
+    test('returns an unsubscribe function', () => {
+        const creator = new Graferse<string>(node => node)
+        let calls = 0
+        const unsubscribe = creator.addListener(() => { calls++ })
+        creator.notifyListeners()
+        unsubscribe()
+        creator.notifyListeners()
+        expect(calls).toBe(1)
+    })
+
+    test('unsubscribe removes one registration, once', () => {
+        const creator = new Graferse<string>(node => node)
+        let calls = 0
+        const listener = () => { calls++ }
+        const unsubscribe = creator.addListener(listener)
+        creator.addListener(listener)
+        unsubscribe()
+        unsubscribe()
+        creator.notifyListeners()
+        expect(calls).toBe(1)
+    })
+
+    test('does not invoke listeners added during notification', () => {
+        const creator = new Graferse<string>(node => node)
+        let lateCalls = 0
+        creator.addListener(() => {
+            creator.addListener(() => { lateCalls++ })
+        })
+        creator.notifyListeners()
+        expect(lateCalls).toBe(0)
+    })
 })
 
 describe('notifyWaiters cascade', () => {

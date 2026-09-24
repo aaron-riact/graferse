@@ -358,10 +358,18 @@ class Graferse<T>
 
     addListener(listener: () => void) {
         this.listeners.push(listener)
+        // removes this registration only, even if listener was added twice
+        let registered = true
+        return () => {
+            if (!registered) return
+            registered = false
+            const index = this.listeners.indexOf(listener)
+            if (index >= 0) this.listeners.splice(index, 1)
+        }
     }
 
     notifyListeners() {
-        for (const listener of this.listeners) {
+        for (const listener of [...this.listeners]) {
             listener()
         }
     }
