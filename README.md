@@ -5,8 +5,9 @@ Graferse
 
 Give it your graph and the path each agent means to drive. It tells every
 agent how far it may go right now, and tells it again the moment that
-changes. Agents never occupy the same place, never meet head on, and never
-sit deadlocked waiting on each other.
+changes. Agents yield instead of occupying the same node or meeting head-on.
+Deadlock freedom depends on topology and fleet size: one-way loops need the
+capacity and exit planning described in [the loop guide](docs/loops.md).
 
 Written for AGV and robot fleets, but it knows nothing about robots — only
 locks, and the callbacks you hand it.
@@ -136,6 +137,8 @@ waiting for it to finish. If you want the name for this, it is
 
 ## Docs
 
+- [One-way loops](docs/loops.md) — the fleet limit that prevents blocked exits,
+  and what loop capacity can and cannot protect
 - [Lock groups](docs/lock-groups.md) — one agent at a time across nodes that
   share physical space, and the deadlock that hides in the quotient graph
 - [Notifications](docs/notifications.md) — how a release cascades, and the
