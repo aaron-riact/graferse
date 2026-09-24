@@ -208,8 +208,7 @@ function view(world: World): StateView {
     }
 }
 
-// built-in safety: one agent per node, and every agent owns the node it is on
-function violations(world: World): string[] {
+export function violations(world: World): string[] {
     const out: string[] = []
     const seen = new Map<string, string>()
     for (const agent of world.agents) {
@@ -220,6 +219,21 @@ function violations(world: World): string[] {
         seen.set(node, agent.spec.name)
         if (!world.nodeLocks.get(node)!.isLocked(agent.spec.name)) {
             out.push(`${agent.spec.name} is on ${node} without holding it`)
+        }
+    }
+    for (const link of new Set(world.linkLocks.values())) {
+        const { lockers } = link.getDetails()
+        const directions = [...lockers.keys()]
+        for (let i = 0; i < directions.length; i++) {
+            for (let j = i + 1; j < directions.length; j++) {
+                for (const first of lockers.get(directions[i])!) {
+                    for (const second of lockers.get(directions[j])!) {
+                        if (first !== second) {
+                            out.push(`${first} and ${second} hold ${link.from} <-> ${link.to} in opposite directions`)
+                        }
+                    }
+                }
+            }
         }
     }
     return out

@@ -1,4 +1,4 @@
-import { check, feasible } from './modelCheck.js'
+import { check, feasible, violations } from './modelCheck.js'
 import type { Scenario } from './modelCheck.js'
 
 const bi = (from: string, to: string) => ({ from, to, bidirectional: true })
@@ -9,6 +9,31 @@ const expectExhaustive = (result: ReturnType<typeof check>) => {
     expect(result.truncated).toBe(false)
     expect(result.states).toBeGreaterThan(0)
 }
+
+describe('model check: safety invariants', () => {
+    test('reports opposing holders of one bidirectional link', () => {
+        const link = {
+            from: 'a',
+            to: 'b',
+            getDetails: () => ({
+                lockers: new Map([
+                    ['a', new Set(['A'])],
+                    ['b', new Set(['B'])],
+                ]),
+                waiters: new Map(),
+            }),
+        }
+        const world = {
+            agents: [],
+            nodeLocks: new Map(),
+            linkLocks: new Map([['a>b', link], ['b>a', link]]),
+        } as unknown as Parameters<typeof violations>[0]
+
+        expect(violations(world)).toEqual([
+            'A and B hold a <-> b in opposite directions',
+        ])
+    })
+})
 
 describe('model check: deadlock freedom', () => {
     const cases: Array<[string, Scenario]> = [
