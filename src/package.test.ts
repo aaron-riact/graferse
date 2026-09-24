@@ -31,4 +31,8 @@ describe('package entry points', () => {
         expect(pkg.exports['.'].default.startsWith('./dist/')).toBe(true)
         expect(pkg.exports['.'].types.startsWith('./dist/')).toBe(true)
     })
+
+    test('exposes a high-severity dependency audit gate', () => {
+        expect(pkg.scripts.audit).toBe('npm audit --audit-level=high')
+    })
 })

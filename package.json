@@ -20,6 +20,7 @@
     "typecheck": "tsc -p tsconfig.test.json",
     "prepack": "npm run build",
     "lint": "eslint .",
+    "audit": "npm audit --audit-level=high",
     "test": "jest",
     "test:cover": "jest --coverage",
     "prepublishOnly": "npm test && npm run lint",

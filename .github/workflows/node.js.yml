@@ -32,6 +32,7 @@ jobs:
         cache: 'npm'
         check-latest: true
     - run: npm ci
+    - run: npm run audit
     - run: npm run build --if-present
     - run: npm run typecheck
     - run: npm run test:cover -- --silent --verbose
