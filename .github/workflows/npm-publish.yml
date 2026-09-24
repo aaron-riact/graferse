@@ -1,4 +1,5 @@
-# Publishes to npm when a GitHub release is created.
+# Publishes to npm when a GitHub release is created, or when release.yml
+# dispatches it for a version tag.
 #
 # Authentication is npm trusted publishing over OIDC: GitHub vouches for the
 # workflow identity and npm checks it, so there is no long lived token in
@@ -20,12 +21,18 @@ on:
     # so a half written draft would publish to npm.  `published` fires when a
     # draft is published, or a release is created already published.
     types: [published]
+  # A release created by release.yml does not fire the trigger above:
+  # GitHub starts no workflows for events caused by GITHUB_TOKEN, except
+  # workflow_dispatch.  So release.yml dispatches this with --ref v<version>.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   test:
+    # a dispatch publishes whatever ref it names, so only accept a version tag
+    if: github.event_name != 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
